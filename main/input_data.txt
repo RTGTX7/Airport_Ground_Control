@@ -1,0 +1,6 @@
+Arrival AA123 American Airlines Boeing 737 08:10:00 50
+Arrival UA456 United Airlines Airbus A320 08:15:00 30
+Arrival DL789 Delta Airlines Boeing 777 08:20:00 70
+Departure BA100 British Airways Airbus A380 08:30:00
+Departure AF200 Air France Boeing 747 08:40:00
+Departure LH300 Lufthansa Boeing 777 08:50:00
