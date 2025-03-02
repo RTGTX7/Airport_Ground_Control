@@ -4,7 +4,7 @@
 |:heavy_check_mark:|:heavy_check_mark:|:x:|:x:|
 
 ## Introduction
-This repository contains the example code for the Cadmium Developers Manual
+This project models and simulates an airport landing system using the DEVS formalism. The system manages aircraft landing, parking, and maintenance through a hierarchical structure of atomic and coupled models. 
 
 ## Dependencies
 This project assumes that you have Cadmium installed in a location accessible by the environment variable $CADMIUM.
@@ -20,10 +20,7 @@ __NOTE__: Everytime you run build_sim.sh, the contents of `build/` and `bin/` wi
 ## Execute
 To run the two models in this project, run:
 ```sh
-./bin/counter_tester
-./bin/testcase_counter
+./bin/Airport_Ground_Control_System
 ```
 
-__NOTE__: Remember to chnage the file path to the testcase files in `counter_tester.hpp` and `testcases.hpp`. Else it would result in a fault
-
-For more information about the models in this repository, and to learn more about modeling in Cadmium, look at the developer's manual found [here](https://devssim.carleton.ca/manuals/developer/).
+__NOTE__: Remember to chnage the file path to the testcase files in `Landing_Control.hpp`. Else it would result in a fault
