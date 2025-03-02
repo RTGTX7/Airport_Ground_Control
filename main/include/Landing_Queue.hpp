@@ -1,84 +1,182 @@
 #ifndef LANDING_QUEUE_HPP
 #define LANDING_QUEUE_HPP
 
-#include <cadmium/modeling/ports.hpp>
-#include <cadmium/modeling/message_bag.hpp>
-#include <queue>
+#include <iostream>
+#include <string>
+#include <deque>   // 由queue改成deque
 #include <vector>
+#include <sstream>
+#include "cadmium/modeling/devs/atomic.hpp"
 #include <limits>
-#include "FlightInfo.hpp"
+#include <stdexcept>
+#include <cstdio>
+#include <iomanip>
 
-// 定义 Landing_Queue 模型的输入和输出端口
-struct Landing_Queue_defs {
-    struct in_landing_request : public cadmium::in_port<FlightInfo> {};  // 接收新的降落请求
-    struct out_landing_complete : public cadmium::out_port<FlightInfo> {};  // 降落完成通知
+using namespace cadmium;
+
+/**
+ * Plane 结构与 operator<<、operator>> 同原先，保持不变
+ */
+struct Plane {
+    std::string status;        
+    std::string flightNumber;  
+    std::string airline;       
+    std::string aircraftType;  
+    std::string arrivalTime;   
+    int fuel;                  
+
+    Plane()
+        : status(""), flightNumber(""), airline(""),
+          aircraftType(""), arrivalTime(""), fuel(0) {}
 };
 
-// 自定义比较函数，按燃油优先级排序（燃油越少，优先级越高）
-struct FuelPriorityComparator {
-    bool operator()(const FlightInfo& a, const FlightInfo& b) {
-        return a.fuel_level > b.fuel_level;  // 燃油少的飞机优先降落
+inline std::ostream& operator<<(std::ostream& os, const Plane& p) {
+    os << p.status << ","
+       << p.flightNumber << ","
+       << p.airline << ","
+       << p.aircraftType << ","
+       << p.arrivalTime << ","
+       << p.fuel;
+    return os;
+}
+
+inline std::istream& operator>>(std::istream& is, Plane& plane) {
+    std::string line;
+    if (!std::getline(is, line)) {
+        return is; // EOF or read error
     }
+    // 跳过空行或注释行
+    if (line.empty() || line[0] == '#') {
+        return is;
+    }
+
+    std::stringstream ss(line);
+    std::string token;
+    std::vector<std::string> tokens;
+    while (std::getline(ss, token, ',')) {
+        tokens.push_back(token);
+    }
+
+    if (tokens.size() < 5) {
+        // 不合规行，可自行处理
+        return is;
+    }
+
+    plane.status        = tokens[0];
+    plane.flightNumber  = tokens[1];
+    plane.airline       = tokens[2];
+    plane.aircraftType  = tokens[3];
+    plane.arrivalTime   = tokens[4];
+    plane.fuel          = 0;
+    if (tokens.size() >= 6) {
+        try {
+            plane.fuel = std::stoi(tokens[5]);
+        } catch (...) {
+            plane.fuel = 0;
+        }
+    }
+
+    return is;
+}
+
+/**
+ * 这里实现LandingQueue时，用std::deque来支持“紧急插队”
+ */
+struct LandingQueueState {
+    // 由 queue 改成 deque
+    std::deque<Plane> planeQueue;  
+    bool busy;   
+    double sigma; 
+
+    LandingQueueState()
+        : busy(false),
+          sigma(std::numeric_limits<double>::infinity()) {}
 };
 
-template<typename TIME>
-class Landing_Queue {
+inline std::ostream& operator<<(std::ostream &out, const LandingQueueState& s) {
+    out << "LandingQueueState("
+        << "busy=" << s.busy << ","
+        << "queue_size=" << s.planeQueue.size() << ","
+        << "sigma=" << s.sigma << ")";
+    return out;
+}
+
+class LandingQueue : public Atomic<LandingQueueState> {
 public:
-    // **1. 定义输入和输出端口**
-    using input_ports = std::tuple<typename Landing_Queue_defs::in_landing_request>;
-    using output_ports = std::tuple<typename Landing_Queue_defs::out_landing_complete>;
+    Port<Plane> plane_in;    // 有飞机到达
+    Port<Plane> landed_out;  // 有飞机完成降落
 
-    // **2. 定义状态**
-    struct state_type {
-        std::priority_queue<FlightInfo, std::vector<FlightInfo>, FuelPriorityComparator> landing_queue;  // 优先级队列
-        bool active;  // 是否有飞机在等待降落
-        TIME next_internal;  // 下一个降落事件的时间
-    };
-    state_type state;
+    // 固定降落时间
+    const double landing_time = 10.0;
 
-    // **3. 初始化构造函数**
-    Landing_Queue() {
-        state.active = false;
-        state.next_internal = std::numeric_limits<TIME>::infinity();  // 初始无事件
+    LandingQueue(const std::string& id)
+        : Atomic<LandingQueueState>(id, LandingQueueState())
+    {
+        plane_in    = addInPort<Plane>("plane_in");
+        landed_out  = addOutPort<Plane>("landed_out");
     }
 
-    // **4. 外部事件 (External Transition Function)**
-    void external_transition(TIME e, typename cadmium::make_message_bags<input_ports>::type mbs) {
-        for (const auto& flight : cadmium::get_messages<typename Landing_Queue_defs::in_landing_request>(mbs)) {
-            state.landing_queue.push(flight);  // 按燃油优先级加入降落队列
+    // internalTransition
+    void internalTransition(LandingQueueState& s) const override {
+        // 弹出队头飞机(它降落完成)
+        if (!s.planeQueue.empty()) {
+            s.planeQueue.pop_front();  // 注意这里是 pop_front()
         }
-        if (!state.active && !state.landing_queue.empty()) {
-            state.active = true;
-            state.next_internal = TIME("00:01:00:000");  // 假设降落需要 1 分钟
-        }
-    }
-
-    // **5. 内部事件 (Internal Transition Function)**
-    void internal_transition() {
-        if (!state.landing_queue.empty()) {
-            state.landing_queue.pop();  // 移除已降落的飞机
-        }
-        if (!state.landing_queue.empty()) {
-            state.next_internal = TIME("00:01:00:000");  // 继续处理下一个飞机
+        // 如果仍有飞机，则继续下一架
+        if (!s.planeQueue.empty()) {
+            s.busy = true;
+            s.sigma = landing_time;
         } else {
-            state.active = false;
-            state.next_internal = std::numeric_limits<TIME>::infinity();
+            s.busy = false;
+            s.sigma = std::numeric_limits<double>::infinity();
         }
     }
 
-    // **6. 输出函数 (Output Function)**
-    typename cadmium::make_message_bags<output_ports>::type output() const {
-        typename cadmium::make_message_bags<output_ports>::type bags;
-        if (!state.landing_queue.empty()) {
-            cadmium::get_messages<typename Landing_Queue_defs::out_landing_complete>(bags).push_back(state.landing_queue.top());
+    // externalTransition
+    void externalTransition(LandingQueueState& s, double e) const override {
+        if (s.sigma != std::numeric_limits<double>::infinity()) {
+            s.sigma -= e;
+            if (s.sigma < 0) s.sigma = 0;
         }
-        return bags;
+
+        // 将到达的飞机加入队列；
+        // 如果 fuel<5，则紧急插队放在前面，否则正常排后面
+        for (auto &newPlane : plane_in->getBag()) {
+            if (newPlane.fuel < 5) {
+                // 紧急插队
+                s.planeQueue.push_front(newPlane);
+            } else {
+                // 普通情况
+                s.planeQueue.push_back(newPlane);
+            }
+        }
+
+        // 若原本不忙且队列非空，则开始降落
+        if (!s.busy && !s.planeQueue.empty()) {
+            s.busy = true;
+            s.sigma = landing_time;
+        }
     }
 
-    // **7. 时间推进函数 (Time Advance Function)**
-    TIME time_advance() const {
-        return state.next_internal;
+    // confluentTransition
+    void confluentTransition(LandingQueueState& s, double e) const override {
+        internalTransition(s);
+        externalTransition(s, 0.0);
     }
+
+    // output
+    void output(const LandingQueueState& s) const override {
+        if (!s.planeQueue.empty()) {
+            // 输出队头飞机，表示它刚好落地完成
+            Plane landedPlane = s.planeQueue.front();
+            landed_out->addMessage(landedPlane);
+        }
+    }
+
+    double timeAdvance(const LandingQueueState& s) const override {
+        return s.sigma;
+    }
+
 };
 
 #endif // LANDING_QUEUE_HPP

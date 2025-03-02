@@ -1,54 +1,32 @@
-#include <cadmium/engine/pdevs_runner.hpp>
-#include <cadmium/logger/common_loggers.hpp>
-#include <fstream>
 #include <iostream>
-#include <sstream>
-#include "Airport_Control.hpp"
-#include "FlightInfo.hpp"
+#include <string>
+#include <memory>
+#include <limits>
+#include "Landing_Control.hpp"
 
-using namespace std;
-using TIME = NDTime;
+// Cadmium v2 相关头文件
+#include "cadmium/simulation/root_coordinator.hpp"
+#include "cadmium/simulation/logger/stdout.hpp"
+#include "cadmium/simulation/logger/csv.hpp"
 
-int main() {
-    // 1. 打开 input_data.txt
-    ifstream infile("input_data.txt");
-    if (!infile) {
-        cerr << "Error: Cannot open input_data.txt" << endl;
-        return 1;
-    }
+using namespace cadmium;
 
-    // 2. 创建 Airport_Control 实例
-    using AirportModel = Airport_Control::model<TIME>;
-    cadmium::engine::runner<TIME, AirportModel> r{{0}};
+int main(int argc, char* argv[]) {
+    // 创建顶层模型实例
+    auto model = std::make_shared<Landing_Control>("Landing_Control");
 
-    // 3. 解析 input_data.txt
-    string line;
-    while (getline(infile, line)) {
-        stringstream ss(line);
-        string type, flight_id, airline, aircraft_type, time;
-        int fuel_level = 0;
-        
-        ss >> type >> flight_id >> airline >> aircraft_type >> time;
-        
-        if (type == "Arrival") {
-            ss >> fuel_level;  // 进港飞机有燃油信息
-            FlightInfo flight(flight_id, airline, aircraft_type, time, false, fuel_level);
-            
-            // 送入 Landing_Control
-            r.run_until_passivate();
-            r.insert_input(Airport_Control_defs::in_new_arrival{}, flight);
-        } 
-        else if (type == "Departure") {
-            FlightInfo flight(flight_id, airline, aircraft_type, time, true);
-            
-            // 送入 Takeoff_Control
-            r.run_until_passivate();
-            r.insert_input(Airport_Control_defs::in_new_departure{}, flight);
-        }
-    }
 
-    // 4. 运行模拟
-    r.run_until(TIME("12:00:00:000"));
+    // 创建 RootCoordinator
+    auto rootCoordinator = RootCoordinator(model);
+
+    // 设定日志记录器（可以选择 CSV 或 STDOUT）
+    // rootCoordinator.setLogger<STDOUTLogger>(";");
+    rootCoordinator.setLogger<CSVLogger>("airport_control_log.csv", ";");
+
+    // 启动仿真
+    rootCoordinator.start();
+    rootCoordinator.simulate(60.1);
+    rootCoordinator.stop();
 
     return 0;
 }
