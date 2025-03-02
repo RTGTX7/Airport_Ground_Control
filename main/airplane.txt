@@ -1,3 +1,16 @@
-15 Arrival,MU980,China Eastern,Airbus A320,00:03:10,60
-20 Arrival,UA347,United Airlines,Boeing 757,00:04:05,4
-27 Arrival,JL210,JAL,Boeing 787,00:05:35,10
+10 Arrival,MU980,China Eastern,Airbus A320,00:03,60  
+15 Arrival,,United Airlines,Boeing 757,00:04:05,4  
+20 Arrival,JL210,JAL,Boeing 787,00:05:35,-10  
+27 Arrival,BA156,British Airways,Airbus A350,00:02:15,50  
+30 Arrival,AF190,Air France,Boeing 777,00:07:25,0  
+35 Arrival,LH404,Lufthansa,???,00:08:40,30  
+40 Arrival,DL567,,Boeing 737,00:09:55,12  
+45 Arrival,EK231,Emirates,Boeing 777,00:11:10,999999  
+50 Arrival,Q@888,Qatar Airways,Airbus A380,00:12:25,90  
+55 Arrival,AA250,American Airlines,Boeing 737  
+60 Arrival,CX101,Cathay Pacific,Airbus A321,00:16:10,40  
+60 Arrival,KL789,KLM,Boeing 787,00:16:10,15  
+this_is_not_valid_data
+70 Arrival,AC202,Air Canada,Boeing 737,00:20:05,30  
+70 Arrival,AC202,Air Canada,Boeing 737,00:20:05,30  
+80 Arrival,TK700,Turkish Airlines,Boeing 777,25:30:50,20
