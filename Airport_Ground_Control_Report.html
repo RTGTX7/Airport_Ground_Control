@@ -1,0 +1,663 @@
+<html><head><link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/vditor@3.9.4/dist/index.css"/>
+<script src="https://cdn.jsdelivr.net/npm/vditor@3.9.4/dist/js/i18n/zh_CN.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/vditor@3.9.4/dist/method.min.js"></script></head>
+<body><div class="vditor-reset" id="preview"><h1>CARLETON UNIVERSITY</h1>
+<h2>Department of Systems and Computer Engineering</h2>
+<h3>SYSC 5104: Methodologies for Discrete Event Modelling and Simulation</h3>
+<h3>Assignment 1</h3>
+<hr />
+<p><strong>William Wang</strong><br />
+<strong>Student ID:</strong> 101191168</p>
+<h2>1. Model Organization</h2>
+<h3>1.0 Assignment Github Location</h3>
+<p>https://github.com/RTGTX7/Airport_Ground_Control/tree/main</p>
+<h3>1.1 Atomic Models</h3>
+<ol>
+<li>​<strong>Landing_Queue</strong>​: Manages the airport landing queue, ensuring that planes land in order while prioritizing emergency landings. The internal logic follows a ​<strong>First-In-First-Out (FIFO) principle</strong>​, but also considers fuel emergencies for priority landings.</li>
+<li>​<strong>Parking_Queue</strong>​: Manages the scheduling of landed planes, ensuring they are parked in the order they arrive and proceed to subsequent processes (e.g., maintenance checks) after a short stay. It follows a ​<strong>FIFO principle</strong>​, meaning the first plane to arrive is the first to complete parking. Each plane requires a ​<strong>fixed parking time of 5 seconds</strong>​.</li>
+<li>​<strong>MaintenanceCheck</strong>​: Receives landed planes and checks for fuel levels or maintenance needs. If maintenance is required, the processing time is extended. Once completed, the plane is output to the system's external environment or the next stage.</li>
+</ol>
+<h3>1.2 Coupled Model</h3>
+<p>The core task of this coupled model is to ​<strong>simulate the complete process of an aircraft from landing to maintenance inspection</strong>​. Its responsibilities include:</p>
+<ol>
+<li><strong>Receiving incoming planes</strong> → Planes enter the <strong>LandingQueue</strong> to wait for landing.</li>
+<li><strong>Managing landing priorities</strong> → Considering <strong>fuel status</strong> and ​<strong>FIFO</strong>​, ensuring emergency landings are handled properly.</li>
+<li><strong>Assigning parking spaces</strong> → Once landed, planes move to the <strong>ParkingQueue</strong> for a short stay.</li>
+<li><strong>Maintenance check</strong> → Planes proceed to <strong>MaintenanceCheck</strong> for <strong>fuel replenishment</strong> or ​<strong>maintenance inspection</strong>​.</li>
+<li><strong>Completing the full process</strong> → Planes that have finished landing, parking, and maintenance are output.</li>
+</ol>
+<ul>
+<li>​<strong>External Input Port</strong>​:
+<ul>
+<li><code>airplane_in</code>: Receives new arriving planes (Plane).</li>
+</ul>
+</li>
+<li>​<strong>External Output Port</strong>​:
+<ul>
+<li><code>finished_plane_out</code>: Outputs planes that have completed landing and maintenance.</li>
+</ul>
+</li>
+</ul>
+<h4>1.2.1 Hierarchical Structure and Coupling Scheme</h4>
+<pre><code>main.cpp
+├── Landing_Control.hpp  (Coupled Model: Handles Landing Process) 
+│   ├── Landing_Queue.hpp  (Atomic Model)
+│   ├── ParkingQueue.hpp  (Atomic Model)
+│   ├── MaintenanceCheck.hpp  (Atomic Model)
+</code></pre>
+<ul>
+<li><strong><code>plane_input_reader</code></strong> (Input Stream) → <code>LandingQueue</code>
+<ul>
+<li>Reads aircraft data from an external file and sends plane data to <code>LandingQueue</code>.</li>
+</ul>
+</li>
+<li><strong><code>LandingQueue</code> → <code>ParkingQueue</code></strong>
+<ul>
+<li>Once a plane completes landing, it moves to the parking queue.</li>
+</ul>
+</li>
+<li><strong><code>ParkingQueue</code> → <code>MaintenanceCheck</code></strong>
+<ul>
+<li>After completing the parking process, the plane moves to the maintenance check phase.</li>
+</ul>
+</li>
+<li><strong><code>MaintenanceCheck</code> → <code>finished_plane_out</code></strong>
+<ul>
+<li>After maintenance is completed, the plane is output to the external system.</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h2>2. Formal Specification</h2>
+<h3>2.1 Coupled Model：Landing_Control</h3>
+<p>&lt;X, Y, {<code>landing_queue</code>, <code>parking_queue</code>, <code>maintenance_check</code>}, EIC, EOC, IC, SELECT&gt;</p>
+<p>X = {∅}<br />
+Y = {<code>final_out</code>}</p>
+<p>EIC = {∅}</p>
+<p>EOC  = {(<code>maintenance_check.plane_out</code>, <code>final_out</code>)}</p>
+<p>IC  = {(<code>plane_input_reader.out</code>, <code>landing_queue.plane_in</code>),<br />
+(<code>landing_queue.landed_out</code>, <code>parking_queue.plane_in</code>),<br />
+(<code>parking_queue.parking_done_out</code>, <code>maintenance_check.plane_in</code>)}</p>
+<p>SELECT({<code>plane_input_reader</code>, <code>landing_queue</code>, <code>parking_queue</code>, <code>maintenance_check</code>}) = <code>plane_input_reader</code></p>
+<p>SELECT({<code>landing_queue</code>, <code>parking_queue</code>, <code>maintenance_check</code>}) = <code>landing_queue</code></p>
+<p>SELECT({<code>parking_queue</code>, <code>maintenance_check</code>}) = <code>parking_queue</code></p>
+<h3>2.2 Atomic DEVS</h3>
+<div class="language-math">\langle X, S, Y, \delta_{\text{int}}, \delta_{\text{ext}}, \lambda, \text{ta}\rangle</div>
+<h5>2.2.1 Landing_Queue (Atomic)</h5>
+<div class="language-graphviz">digraph LandingQueue {
+    rankdir=TB;
+    
+    subgraph cluster_LandingQueue {
+        label=&quot;LandingQueue Atomic Model&quot;;
+        style=filled;
+        color=lightgrey;
+        
+        state [label=&quot;LandingQueueState\n(busy, sigma, planeQueue)&quot;, shape=box, style=filled, fillcolor=white];
+        ext_in [label=&quot;Input Port:\nplane_in&quot;, shape=ellipse, style=filled, fillcolor=lightblue];
+        ext_out [label=&quot;Output Port:\nlanded_out&quot;, shape=ellipse, style=filled, fillcolor=lightblue];
+
+        extTrans [label=&quot;externalTransition\n(Update queue, handle emergency landings)&quot;, shape=box];
+        intTrans [label=&quot;internalTransition\n(Pop front of queue, complete landing)&quot;, shape=box];
+        confluentTrans [label=&quot;confluentTransition\n(Process internal first, then external)&quot;, shape=box];
+        outputFunc [label=&quot;output\n(Send front plane to output)&quot;, shape=box];
+        timeAdv [label=&quot;timeAdvance\n(Return sigma)&quot;, shape=box];
+    }
+
+    ext_in -&gt; extTrans [label=&quot;Plane arrival event&quot;];
+    extTrans -&gt; state;
+
+    state -&gt; intTrans [label=&quot;If busy &amp; sigma expires&quot;];
+    intTrans -&gt; state;
+
+    state -&gt; outputFunc [label=&quot;Trigger output event&quot;];
+    outputFunc -&gt; ext_out;
+    
+    state -&gt; timeAdv;
+
+    ext_in -&gt; confluentTrans [label=&quot;Simultaneous event&quot;, style=dashed];
+    state -&gt; confluentTrans [label=&quot;Triggers&quot;, style=dashed];
+}
+</div>
+<p><span class="language-math">X = \{\text{Plane}\}</span></p>
+<ul>
+<li>Messages received on the input port <code>plane_in</code>, representing new incoming Plane objects waiting to land.</li>
+</ul>
+<p><span class="language-math">S = \{\,(\text{planeQueue}, \text{busy}, \sigma)\,\mid \text{planeQueue} \in \text{deque&lt;Plane&gt;}, \, \text{busy} \in \{ \text{true}, \text{false} \},</span><br />
+<span class="language-math">\, \sigma \in \mathbb{R}^{+}_{0} \cup \{\infty\} \}</span></p>
+<ul>
+<li><strong>planeQueue</strong>: A <code>std::deque&lt;Plane&gt;</code> storing planes waiting to land.</li>
+<li><strong>busy</strong>: A boolean variable indicating whether a plane is currently landing.​</li>
+<li>​<span class="language-math">\sigma</span>: Remaining landing time; if <span class="language-math">\infty</span>, the system is idle, waiting for input.</li>
+</ul>
+<p><span class="language-math">Y = \{\text{Plane}\}</span></p>
+<ul>
+<li>Messages sent to the output port <code>landed_out</code>, indicating a plane has just completed landing.</li>
+</ul>
+<p><span class="language-math">\delta\_{\text{int}} : S \to S</span></p>
+<ul>
+<li><strong>Trigger Condition</strong>​: When the landing timer expires (internal event occurs).-</li>
+<li><strong>State Update Rules​</strong>:
+<ul>
+<li>Remove the <strong>front plane</strong> from <code>planeQueue</code> (this plane has landed).</li>
+<li>If <code>planeQueue</code> is not empty, set: busy←true, σ←10.0(Next plane starts landing; fixed landing time is 10 seconds).</li>
+<li>Otherwise, set: busy←false, σ←∞  (No planes are waiting, returning to idle state).</li>
+</ul>
+</li>
+</ul>
+<p><span class="language-math">\delta\_{\text{ext}} : S \times \mathbb{R}^{+} \times X \to S</span></p>
+<ul>
+<li>
+<p>Trigger Condition​: When a new plane arrives (external event) after time ee has elapsed.</p>
+</li>
+<li>
+<p>State Update Rules​:</p>
+<ul>
+<li><strong>Subtract elapsed time</strong>​: If <span class="language-math">\sigma \neq \infty</span>, update: <span class="language-math">\sigma \leftarrow \max(0, \sigma - e)</span></li>
+<li><strong>Insert plane into the queue</strong>​: For each incoming plane <code>newPlane</code> received on <code>plane_in</code>:
+<ul>
+<li>If <code>newPlane.fuel &lt; 5</code>, use: planeQueue.push_front(newPlane) (Emergency landing; plane goes to the front of the queue).</li>
+<li>Otherwise, use: planeQueue.push_back(newPlane)(Normal queueing order).</li>
+</ul>
+</li>
+<li>​<strong>Start landing if idle</strong>​: If busy=<span class="language-math">\text{busy} = \text{false} \quad \text{and} \quad \text{planeQueue} \neq \emptyset</span> then set: <span class="language-math">\text{busy} \leftarrow \text{true}, \quad \sigma \leftarrow 10.0</span> (Start a new landing process).</li>
+</ul>
+</li>
+</ul>
+<p><span class="language-math">\lambda : S \to Y</span> ​</p>
+<ul>
+<li>Trigger Condition: Just before an internal event (when a landing is completed).</li>
+</ul>
+<ul>
+<li>​Output Rule​:
+<ul>
+<li>If <code>planeQueue</code> is not empty, send the front plane to the <code>landed_out</code> port, indicating that it ​<strong>has just completed landing</strong>​.</li>
+<li>If the queue is empty, there is no output.</li>
+</ul>
+</li>
+</ul>
+<p><span class="language-math">\text{ta} : S \to \mathbb{R}^{+}_{0}</span>, <span class="language-math">\text{ta}((\text{planeQueue}, \text{busy}, \sigma)) = \sigma</span></p>
+<ul>
+<li>If <code>busy</code> is ​true​, σ is usually ​10.0​.</li>
+<li>​If <code>busy</code> is ​false​, σ is ∞, meaning the system is waiting for input.</li>
+</ul>
+<h5>2.2.2 Parking_Queue (Atomic)</h5>
+<div class="language-graphviz">digraph ParkingQueue {
+    rankdir=TB;
+    
+    subgraph cluster_ParkingQueue {
+        label=&quot;ParkingQueue Atomic Model&quot;;
+        style=filled;
+        color=lightgrey;
+        
+        state [label=&quot;ParkingQueueState\n(busy, sigma, planeQueue)&quot;, shape=box, style=filled, fillcolor=white];
+        ext_in [label=&quot;Input Port:\nplane_in&quot;, shape=ellipse, style=filled, fillcolor=lightblue];
+        ext_out [label=&quot;Output Port:\nparking_done_out&quot;, shape=ellipse, style=filled, fillcolor=lightblue];
+
+        extTrans [label=&quot;externalTransition\n(Decrease sigma, add plane, start service)&quot;, shape=box];
+        intTrans [label=&quot;internalTransition\n(Pop front plane, update state)&quot;, shape=box];
+        confluentTrans [label=&quot;confluentTransition\n(Process internal first, then external)&quot;, shape=box];
+        outputFunc [label=&quot;output\n(Send front plane to output)&quot;, shape=box];
+        timeAdv [label=&quot;timeAdvance\n(Return sigma)&quot;, shape=box];
+    }
+
+    ext_in -&gt; extTrans [label=&quot;New plane arrives&quot;];
+    extTrans -&gt; state;
+
+    state -&gt; intTrans [label=&quot;If sigma expires&quot;];
+    intTrans -&gt; state;
+
+    state -&gt; outputFunc [label=&quot;Trigger output event&quot;];
+    outputFunc -&gt; ext_out;
+    
+    state -&gt; timeAdv;
+
+    ext_in -&gt; confluentTrans [label=&quot;Simultaneous event&quot;, style=dashed];
+    state -&gt; confluentTrans [label=&quot;Update state&quot;, style=dashed];
+}
+</div>
+<p><span class="language-math">X = \{\text{Plane}\}</span></p>
+<ul>
+<li>Messages received on the input port <code>plane_in</code>, representing planes that have landed and are now arriving at the parking area.</li>
+</ul>
+<p><span class="language-math">S = \{\,(\text{planeQueue}, \text{busy}, \sigma) \mid \text{planeQueue} \in \text{queue&lt;Plane&gt;},\, \text{busy} \in \{\text{true}, \text{false}\},\, \sigma \in \mathbb{R}^{+}_{0} \cup \{\infty\}\}</span></p>
+<ul>
+<li><strong>planeQueue</strong>: A <code>std::queue&lt;Plane&gt;</code> storing planes waiting for parking processing.</li>
+<li><strong>busy</strong>: A boolean variable indicating whether a plane is currently being processed in the parking area.</li>
+<li><strong><span class="language-math">\sigma</span></strong>: Remaining parking service time; if <span class="language-math">\sigma = \infty</span>, the system is idle and waiting for a new plane.</li>
+</ul>
+<p><span class="language-math">Y = \{\text{Plane}\}</span></p>
+<ul>
+<li>Messages sent on the output port <code>parking_done_out</code>, indicating that a plane has just completed its parking process.</li>
+</ul>
+<p><span class="language-math">\delta_{\text{int}} : S \to S</span></p>
+<ul>
+<li><strong>Trigger Condition</strong>: When the parking service time expires (internal event occurs).</li>
+<li><strong>State Update Rules</strong>:
+<ul>
+<li>Remove the <strong>front plane</strong> from <code>planeQueue</code> (this plane has completed parking).</li>
+<li>If <code>planeQueue</code> is not empty, then set:<br />
+<span class="language-math">\text{busy} \leftarrow \text{true}</span>,<br />
+<span class="language-math">\sigma \leftarrow 5.0</span><br />
+(Start processing the next plane, with a fixed parking time of 5 seconds).</li>
+<li>Otherwise, set:<br />
+<span class="language-math">\text{busy} \leftarrow \text{false}</span>,<br />
+<span class="language-math">\sigma \leftarrow \infty</span><br />
+(No planes waiting; system becomes idle).</li>
+</ul>
+</li>
+</ul>
+<p><span class="language-math">\delta_{\text{ext}} : S \times \mathbb{R}^{+} \times X \to S</span></p>
+<ul>
+<li><strong>Trigger Condition</strong>: When new plane(s) arrive (external event) after elapsed time <span class="language-math">e</span>.</li>
+<li><strong>State Update Rules</strong>:
+<ul>
+<li><strong>Subtract elapsed time</strong>: If <span class="language-math">\sigma \neq \infty</span>, update<br />
+<span class="language-math">\sigma \leftarrow \max(0, \sigma - e)</span>.</li>
+<li><strong>Insert new plane(s)</strong>: For each plane received on <code>plane_in</code>, append it to <code>planeQueue</code> using standard queue insertion.</li>
+<li><strong>Start service if idle</strong>: If the system is idle (i.e., <span class="language-math">\text{busy} = \text{false}</span>) and <code>planeQueue</code> is not empty, then set:<br />
+<span class="language-math">\text{busy} \leftarrow \text{true}</span>,<br />
+<span class="language-math">\sigma \leftarrow 5.0</span><br />
+(Initiate the parking service for the next plane).</li>
+</ul>
+</li>
+</ul>
+<p><span class="language-math">\lambda : S \to Y</span></p>
+<ul>
+<li><strong>Trigger Condition</strong>: Just before an internal event (i.e., when a plane's parking service is completed).</li>
+<li><strong>Output Rule</strong>:
+<ul>
+<li>If <code>planeQueue</code> is not empty, output the <strong>front plane</strong> to the <code>parking_done_out</code> port, indicating that it has just finished parking.</li>
+<li>If the queue is empty, there is no output.</li>
+</ul>
+</li>
+</ul>
+<p><span class="language-math">\text{ta} : S \to \mathbb{R}^{+}_{0}</span>, <span class="language-math">\text{ta}((\text{planeQueue}, \text{busy}, \sigma)) = \sigma</span></p>
+<ul>
+<li><strong>Time Advance Function</strong>:
+<ul>
+<li>When <span class="language-math">\text{busy}</span> is true, <span class="language-math">\sigma</span> is the fixed parking time (5.0 seconds).</li>
+<li>When <span class="language-math">\text{busy}</span> is false, <span class="language-math">\sigma = \infty</span>, meaning the system is waiting for input.</li>
+</ul>
+</li>
+</ul>
+<h5>2.2.3 Maintenance_Check (Atomic)</h5>
+<div class="language-graphviz">digraph MaintenanceCheck {
+    rankdir=TB;
+    
+    subgraph cluster_MaintenanceCheck {
+        label=&quot;MaintenanceCheck Atomic Model&quot;;
+        style=filled;
+        color=lightgrey;
+        
+        ext_in [label=&quot;Input Port:\nplane_in&quot;, shape=ellipse, style=filled, fillcolor=lightblue];
+        ext_out [label=&quot;Output Port:\nplane_out&quot;, shape=ellipse, style=filled, fillcolor=lightblue];
+        
+        state [label=&quot;MaintenanceCheckState\n(hasPlane, plane, sigma)&quot;, shape=box, style=filled, fillcolor=white];
+
+        timeAdv [label=&quot;timeAdvance\n(Return sigma)&quot;, shape=box];
+
+        extTrans [label=&quot;externalTransition\n(Receive plane, check fuel, start inspection)&quot;, shape=box];
+        confluentTrans [label=&quot;confluentTransition\n(Process internal first, then external)&quot;, shape=box, style=dashed];
+        intTrans [label=&quot;internalTransition\n(Inspection complete, reset state)&quot;, shape=box];
+
+        outputFunc [label=&quot;output\n(Send inspected plane to output)&quot;, shape=box];
+
+        // Data flow connections
+        ext_in -&gt; extTrans [label=&quot;Plane arrives&quot;];
+        extTrans -&gt; state;
+
+        state -&gt; intTrans [label=&quot;If inspection time expires&quot;];
+        intTrans -&gt; state;
+
+        state -&gt; outputFunc [label=&quot;Trigger output event&quot;];
+        outputFunc -&gt; ext_out;
+        
+        state -&gt; timeAdv;
+
+        ext_in -&gt; confluentTrans [label=&quot;Simultaneous event&quot;, style=dashed];
+        state -&gt; confluentTrans [label=&quot;Update state&quot;, style=dashed];
+    }
+}
+</div>
+<p><span class="language-math">X = \{\text{Plane}\}</span></p>
+<ul>
+<li>Messages received on the input port <code>plane_in</code>, representing incoming Plane objects that require a maintenance check.</li>
+</ul>
+<p><span class="language-math">S = \{\,(\text{hasPlane}, \text{plane}, \sigma)\,\mid\; \text{hasPlane} \in \{\text{true}, \text{false}\},\, \text{plane} \in \text{Plane},\, \sigma \in \mathbb{R}^{+}_{0} \cup \{\infty\}\}</span></p>
+<ul>
+<li><strong>hasPlane</strong>: A boolean variable indicating whether a plane is currently being checked/maintained.</li>
+<li><strong>plane</strong>: A Plane object that is currently undergoing maintenance (valid only if hasPlane is true).</li>
+<li><strong><span class="language-math">\sigma</span></strong>: Remaining maintenance time; if <span class="language-math">\sigma = \infty</span>, the system is idle and waiting for a new input.</li>
+</ul>
+<p><span class="language-math">Y = \{\text{Plane}\}</span></p>
+<ul>
+<li>Messages sent to the output port <code>plane_out</code>, indicating that a plane has just completed its maintenance check.</li>
+</ul>
+<p><span class="language-math">\delta_{\text{int}} : S \to S</span></p>
+<ul>
+<li><strong>Trigger Condition</strong>: When the maintenance timer expires (i.e., an internal event occurs).</li>
+<li><strong>State Update Rules</strong>:
+<ul>
+<li>Set <strong>hasPlane</strong> to false (indicating maintenance is completed).</li>
+<li>Reset <span class="language-math">\sigma</span> to <span class="language-math">\infty</span>, meaning the system returns to an idle state.</li>
+</ul>
+</li>
+</ul>
+<p><span class="language-math">\delta_{\text{ext}} : S \times \mathbb{R}^{+} \times X \to S</span></p>
+<ul>
+<li><strong>Trigger Condition</strong>: When a new plane arrives (external event) after elapsed time <span class="language-math">e</span>.</li>
+<li><strong>State Update Rules</strong>:
+<ul>
+<li><strong>Subtract elapsed time</strong>: If <span class="language-math">\sigma \neq \infty</span>, update <span class="language-math">\sigma \leftarrow \max(0, \sigma - e)</span>.</li>
+<li><strong>For each incoming plane</strong> <code>p</code> received on <code>plane_in</code>:
+<ul>
+<li>If the system is idle (i.e., <strong>hasPlane</strong> is false), then:
+<ul>
+<li>Set <strong>plane</strong> to <code>p</code> and <strong>hasPlane</strong> to true.</li>
+<li>Determine the maintenance duration based on fuel:
+<ul>
+<li>If <code>p.fuel &lt; 30</code>, set <span class="language-math">\sigma \leftarrow 15.0</span> (maintenance needed).</li>
+<li>Otherwise, set <span class="language-math">\sigma \leftarrow 1.0</span> (quick check).</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>If the system is already busy (i.e., <strong>hasPlane</strong> is true), ignore the additional plane (or alternatively, implement a queueing/discard strategy).</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<p><span class="language-math">\lambda : S \to Y</span></p>
+<ul>
+<li><strong>Trigger Condition</strong>: Just before an internal event (when the maintenance check is completed).</li>
+<li><strong>Output Rule</strong>:
+<ul>
+<li>If <strong>hasPlane</strong> is true, output the stored plane object to the port <code>plane_out</code>, indicating the maintenance check has been completed.</li>
+</ul>
+</li>
+</ul>
+<p><span class="language-math">\text{ta} : S \to \mathbb{R}^{+}_{0}</span>, <span class="language-math">\text{ta}((\text{hasPlane}, \text{plane}, \sigma)) = \sigma</span></p>
+<ul>
+<li><strong>Time Advance Function</strong>:
+<ul>
+<li>If <strong>hasPlane</strong> is true, <span class="language-math">\sigma</span> represents the remaining maintenance time (15.0 or 1.0, depending on fuel level).</li>
+<li>If <strong>hasPlane</strong> is false, <span class="language-math">\sigma = \infty</span>, meaning the system is waiting for a new input.</li>
+</ul>
+</li>
+</ul>
+<h2>3. Experimentation Strategy</h2>
+<p>In our experimentation, the formal DEVS model is defined as:</p>
+<div class="language-math">\langle X,\, Y,\, M,\, EIC,\, EOC,\, IC,\, SELECT \rangle</div>
+<p>where:</p>
+<ul>
+<li><strong>(X)</strong>: The set of external input events.</li>
+<li><strong>(Y)</strong>: The set of external output events.</li>
+<li><strong>(M)</strong>: The collection of atomic submodels, including:
+<ul>
+<li><strong>LandingQueue</strong>: Processes incoming aircraft and manages landing order.</li>
+<li><strong>ParkingQueue</strong>: Handles post-landing parking operations.</li>
+<li><strong>MaintenanceCheck</strong>: Performs post-parking maintenance and fuel checks.</li>
+</ul>
+</li>
+<li><strong>(EIC)</strong>: Maps the external input (from an IEStream reading events) to the input ports of the internal models.</li>
+<li><strong>(IC)</strong>: Defined by the following couplings:</li>
+</ul>
+<div class="language-math">IC = \{ (\text{LandingQueue.out}, \text{ParkingQueue.in}),\ (\text{ParkingQueue.out}, \text{MaintenanceCheck.in}) \}</div>
+<ul>
+<li><strong>(EOC)</strong>: Maps the output of the MaintenanceCheck to the external output of the coupled model.</li>
+<li><strong>(SELECT)</strong>: Resolves simultaneous events (managed by the simulation framework).</li>
+</ul>
+<h3>Test Input Events</h3>
+<p>The following input events are used in the experiment:</p>
+<pre><code class="language-plaintext">15 Arrival,MU980,China Eastern,Airbus A320,00:03:10,60
+16 Arrival,SQ318,Singapore Airlines,Boeing 747,00:3:40,25
+20 Arrival,UA347,United Airlines,Boeing 757,00:04:05,4
+27 Arrival,JL210,JAL,Boeing 787,00:05:35,10
+</code></pre>
+<p>These events are read by the <strong>IEStream</strong> component and injected into the model at the specified simulation times.</p>
+<hr />
+<h3><strong>3.1.1Test Scenario A: Normal Operations</strong></h3>
+<h4><strong>Events Involved</strong></h4>
+<ul>
+<li>​<strong>Time 15</strong>​: Arrival of MU980 (Fuel = 60)</li>
+<li>​<strong>Time 16</strong>​: Arrival of SQ318 (Fuel = 25)</li>
+</ul>
+<h4><strong>Expected Behavior</strong></h4>
+<ol>
+<li><strong>LandingQueue</strong>
+<ul>
+<li>MU980 enters the queue normally (appended at the back) since its fuel level is sufficient.</li>
+<li>SQ318 also joins the queue at the back since its fuel is above the emergency threshold.</li>
+<li>The model processes these aircraft in order, with each landing operation taking ​<strong>10.0 time units</strong>​.</li>
+</ul>
+</li>
+<li><strong>ParkingQueue</strong>
+<ul>
+<li>Once landing is complete, the aircraft are forwarded to ​<strong>ParkingQueue</strong>​, where each aircraft is parked for a fixed ​<strong>5.0 time units</strong>​.</li>
+</ul>
+</li>
+<li><strong>MaintenanceCheck</strong>
+<ul>
+<li>After parking, aircraft enter ​<strong>MaintenanceCheck</strong>​.</li>
+<li>Since both MU980 and SQ318 have fuel levels above 30, they only require a ​**quick check (1.0 time unit)**​.</li>
+</ul>
+</li>
+</ol>
+<h4><strong>Observed Results</strong></h4>
+<ul>
+<li><strong>LandingQueue</strong> updates state correctly, producing expected output (<code>landed_out</code>).</li>
+<li><strong>ParkingQueue</strong> and <strong>MaintenanceCheck</strong> update their state sequentially.</li>
+<li>Aircraft are processed without delay, confirming the system operates correctly under normal conditions.</li>
+</ul>
+<hr />
+<h3><strong>3.1.2 Test Scenario B: Emergency Insertion</strong></h3>
+<h4><strong>Event Involved</strong></h4>
+<ul>
+<li>​<strong>Time 20</strong>​: Arrival of UA347 (Fuel = 4)</li>
+</ul>
+<h4><strong>Expected Behavior</strong></h4>
+<ol>
+<li><strong>LandingQueue</strong>
+<ul>
+<li>UA347 triggers <strong>emergency insertion</strong> due to critically low fuel.</li>
+<li>Instead of being appended at the end, UA347 is inserted ​<strong>at the front of the queue</strong>​.</li>
+<li>UA347 lands <strong>before</strong> previously scheduled aircraft.</li>
+</ul>
+</li>
+<li><strong>ParkingQueue</strong>
+<ul>
+<li>After landing, UA347 is forwarded to ​<strong>ParkingQueue</strong>​.</li>
+</ul>
+</li>
+<li><strong>MaintenanceCheck</strong>
+<ul>
+<li>Since UA347's fuel is critically low (<code>Fuel &lt; 30</code>), it requires ​**extended maintenance (15.0 time units)**​.</li>
+</ul>
+</li>
+</ol>
+<h4><strong>Observed Results</strong></h4>
+<ul>
+<li>The simulation log confirms that at ​<strong>Time 20</strong>​, UA347 <strong>jumps ahead</strong> in the queue.</li>
+<li><strong>LandingQueue</strong> correctly prioritizes emergency cases.</li>
+<li>The <strong>MaintenanceCheck</strong> applies extended processing time for UA347.</li>
+</ul>
+<h3><strong>3.2.1 Integration Testing</strong></h3>
+<p>Run different simulation experiments, modify the original experimental framework, and demonstrate the model's response to various inputs (including non-standard inputs).</p>
+<pre><code class="language-plaintext"># Case 1: Invalid time format (Missing seconds)
+10 Arrival,MU980,China Eastern,Airbus A320,00:03,60  
+
+# Case 2: Missing flight number
+15 Arrival,,United Airlines,Boeing 757,00:04:05,4  
+
+# Case 3: Negative fuel (Impossible value)
+20 Arrival,JL210,JAL,Boeing 787,00:05:35,-10  
+
+# Case 4: Out-of-order timestamp (event time is earlier than previous one)
+27 Arrival,BA156,British Airways,Airbus A350,00:02:15,50  
+
+# Case 5: Zero fuel (should be emergency but may break logic)
+30 Arrival,AF190,Air France,Boeing 777,00:07:25,0  
+
+# Case 6: Corrupt aircraft type (random characters)
+35 Arrival,LH404,Lufthansa,???,00:08:40,30  
+
+# Case 7: Missing airline name
+40 Arrival,DL567,,Boeing 737,00:09:55,12  
+
+# Case 8: Extremely large fuel value (unrealistic)
+45 Arrival,EK231,Emirates,Boeing 777,00:11:10,999999  
+
+# Case 9: Special characters in flight number
+50 Arrival,Q@888,Qatar Airways,Airbus A380,00:12:25,90  
+
+# Case 10: Malformed entry (missing fields)
+55 Arrival,AA250,American Airlines,Boeing 737  
+
+# Case 11: Overlapping timestamps (multiple arrivals at the same second)
+60 Arrival,CX101,Cathay Pacific,Airbus A321,00:16:10,40  
+60 Arrival,KL789,KLM,Boeing 787,00:16:10,15  
+
+# Case 12: Random text noise (unstructured input)
+this_is_not_valid_data
+
+# Case 13: Duplicated entries (testing duplicate detection)
+70 Arrival,AC202,Air Canada,Boeing 737,00:20:05,30  
+70 Arrival,AC202,Air Canada,Boeing 737,00:20:05,30  
+
+# Case 14: Extreme time value (Beyond 24-hour format)
+80 Arrival,TK700,Turkish Airlines,Boeing 777,25:30:50,20
+</code></pre>
+<h3>3.2.2✔ Aircraft Landing System - Integration Test Cases &amp; Results</h3>
+<table>
+<thead>
+<tr>
+<th><strong>Case</strong></th>
+<th><strong>Input Description</strong></th>
+<th><strong>Expected Result</strong></th>
+<th><strong>Actual Model Behavior</strong></th>
+<th><strong>Pass/Fail</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>1</strong></td>
+<td>Invalid time format (Missing seconds)<code>10 Arrival,MU980,China Eastern,Airbus A320,00:03,60</code></td>
+<td>Should be rejected or flagged as an error due to incomplete time format.</td>
+<td>Model detected format error and rejected input.</td>
+<td>✔</td>
+</tr>
+<tr>
+<td><strong>2</strong></td>
+<td>Missing flight number<code>15 Arrival,,United Airlines,Boeing 757,00:04:05,4</code></td>
+<td>Should be rejected or flagged as a warning, requiring complete data.</td>
+<td>Warning was generated, and the entry was ignored or marked as invalid.</td>
+<td>✔</td>
+</tr>
+<tr>
+<td><strong>3</strong></td>
+<td>Negative fuel value (Impossible case)<code>20 Arrival,JL210,JAL,Boeing 787,00:05:35,-10</code></td>
+<td>Should be rejected, as fuel cannot be negative.</td>
+<td>Model detected negative fuel and rejected input.</td>
+<td>✔</td>
+</tr>
+<tr>
+<td><strong>4</strong></td>
+<td>Out-of-order timestamp<code>27 Arrival,BA156,British Airways,Airbus A350,00:02:15,50</code></td>
+<td>Should be flagged for incorrect event sequence, rejected or reordered.</td>
+<td>Log shows timestamp order inconsistency, but model did not correct it.</td>
+<td>✘</td>
+</tr>
+<tr>
+<td><strong>5</strong></td>
+<td>Zero fuel (Should trigger emergency logic)<code>30 Arrival,AF190,Air France,Boeing 777,00:07:25,0</code></td>
+<td>Should trigger emergency landing priority.</td>
+<td>Emergency insertion correctly triggered, treating 0 fuel as an emergency.</td>
+<td>✔</td>
+</tr>
+<tr>
+<td><strong>6</strong></td>
+<td>Corrupt aircraft type (Random characters)<code>35 Arrival,LH404,Lufthansa,???,00:08:40,30</code></td>
+<td>Should either process as an unknown type or flag a warning.</td>
+<td>Model processed with a warning and stored as an unknown type.</td>
+<td>✔</td>
+</tr>
+<tr>
+<td><strong>7</strong></td>
+<td>Missing airline name<code>40 Arrival,DL567,,Boeing 737,00:09:55,12</code></td>
+<td>Should flag incomplete data and require valid input.</td>
+<td>Partial missing fields detected, warning issued, but data was partially processed.</td>
+<td>✘ (Data integrity issue)</td>
+</tr>
+<tr>
+<td><strong>8</strong></td>
+<td>Extremely large fuel value (Unrealistic case)<code>45 Arrival,EK231,Emirates,Boeing 777,00:11:10,999999</code></td>
+<td>Should flag as invalid or apply range checks.</td>
+<td>Model did not check extreme values and processed an unrealistic number.</td>
+<td>✘ (Lacks numerical range validation)</td>
+</tr>
+<tr>
+<td><strong>9</strong></td>
+<td>Special characters in flight number<code>50 Arrival,Q@888,Qatar Airways,Airbus A380,00:12:25,90</code></td>
+<td>Special characters should be either allowed or flagged based on rules.</td>
+<td>Model processed the entry correctly based on system rules.</td>
+<td>✔</td>
+</tr>
+<tr>
+<td><strong>10</strong></td>
+<td>Malformed entry (Missing fields)<code>55 Arrival,AA250,American Airlines,Boeing 737</code></td>
+<td>Should be rejected due to missing required fields.</td>
+<td>Model detected incomplete fields, ignored entry, and issued a warning.</td>
+<td>✔</td>
+</tr>
+<tr>
+<td><strong>11</strong></td>
+<td>Overlapping timestamps (Multiple arrivals at the same second)<code>60 Arrival,CX101,Cathay Pacific,Airbus A321,00:16:10,40</code>​<code>60 Arrival,KL789,KLM,Boeing 787,00:16:10,15</code></td>
+<td>Should correctly process multiple events with potential order resolution.</td>
+<td>Model handled simultaneous arrivals, but order consistency remains uncertain.</td>
+<td>✔</td>
+</tr>
+<tr>
+<td><strong>12</strong></td>
+<td>Random text noise (Unstructured input)<code>this_is_not_valid_data</code></td>
+<td>Should be rejected outright due to unrecognizable format.</td>
+<td>Model detected an invalid entry and ignored it.</td>
+<td>✔</td>
+</tr>
+<tr>
+<td><strong>13</strong></td>
+<td>Duplicated entries (Testing duplicate detection)<code>70 Arrival,AC202,Air Canada,Boeing 737,00:20:05,30</code>(Duplicate entries)</td>
+<td>Should detect duplicates and process only once or flag as duplicate.</td>
+<td>Model treated both as separate events, failing to detect duplication.</td>
+<td>✘</td>
+</tr>
+<tr>
+<td><strong>14</strong></td>
+<td>Extreme time value (Beyond 24-hour format)<code>80 Arrival,TK700,Turkish Airlines,Boeing 777,25:30:50,20</code></td>
+<td>Should be rejected due to an invalid timestamp exceeding 24 hours.</td>
+<td>Model detected invalid time format and rejected the entry.</td>
+<td>✔</td>
+</tr>
+</tbody>
+</table>
+</div>
+<script>
+    const previewElement = document.getElementById('preview')
+    Vditor.setContentTheme('light', 'https://unpkg.com/vditor@3.9.4/dist/css/content-theme');
+    Vditor.codeRender(previewElement);
+    Vditor.highlightRender({"enable":true,"lineNumber":true,"defaultLang":"","style":"monokai"}, previewElement, 'https://cdn.jsdelivr.net/npm/vditor@3.9.4');
+    Vditor.mathRender(previewElement, {
+        cdn: 'https://cdn.jsdelivr.net/npm/vditor@3.9.4',
+        math: {"engine":"MathJax","inlineDigit":true,"macros":{"bf":"{\\boldsymbol f}","bu":"{\\boldsymbol u}","bv":"{\\boldsymbol v}","bw":"{\\boldsymbol w}"}},
+    });
+    Vditor.mermaidRender(previewElement, 'https://cdn.jsdelivr.net/npm/vditor@3.9.4', 'classic');
+    Vditor.markmapRender(previewElement, 'https://cdn.jsdelivr.net/npm/vditor@3.9.4', 'classic');
+    Vditor.flowchartRender(previewElement, 'https://cdn.jsdelivr.net/npm/vditor@3.9.4');
+    Vditor.graphvizRender(previewElement, 'https://cdn.jsdelivr.net/npm/vditor@3.9.4');
+    Vditor.chartRender(previewElement, 'https://cdn.jsdelivr.net/npm/vditor@3.9.4', 'classic');
+    Vditor.mindmapRender(previewElement, 'https://cdn.jsdelivr.net/npm/vditor@3.9.4', 'classic');
+    Vditor.abcRender(previewElement, 'https://cdn.jsdelivr.net/npm/vditor@3.9.4');
+    Vditor.mediaRender(previewElement);
+    Vditor.speechRender(previewElement);
+</script>
+<script src="https://cdn.jsdelivr.net/npm/vditor@3.9.4/dist/js/icons/material.js"></script></body></html>
