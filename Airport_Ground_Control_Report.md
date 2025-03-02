@@ -215,7 +215,7 @@ $X = \{\text{Plane}\}$
 
 - Messages received on the input port `plane_in`, representing planes that have landed and are now arriving at the parking area.
 
-$S = \{\,(\text{planeQueue}, \text{busy}, \sigma) \mid \text{planeQueue} \in \text{queue<Plane>},\, \text{busy} \in \{\text{true}, \text{false}\},\, \sigma \in \mathbb{R}^{+}_{0} \cup \{\infty\}\}$
+$S = \{\,(\text{planeQueue}, \text{busy}, \sigma) \mid \text{planeQueue} \in \text{queue<Plane>},\, \text{busy} \in \{\text{true}, \text{false}\},\, \sigma \in \mathbb{R}^{+}_{0} \cup \{\infty\}\}$$
 
 - **planeQueue**: A `std::queue<Plane>` storing planes waiting for parking processing.
 - **busy**: A boolean variable indicating whether a plane is currently being processed in the parking area.
