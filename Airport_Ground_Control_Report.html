@@ -13,7 +13,7 @@
 <p>https://github.com/RTGTX7/Airport_Ground_Control/tree/main</p>
 <h3>1.1 Atomic Models</h3>
 <ol>
-<li>​<strong>Landing_Queue</strong>​: Manages the airport landing queue, ensuring that planes land in order while prioritizing emergency landings. The internal logic follows a ​<strong>First-In-First-Out (FIFO) principle</strong>​, but also considers fuel emergencies for priority landings.</li>
+<li>​<strong>Landing_Queue</strong>​: Manages the airport landing queue, ensuring that planes land in order while prioritizing emergency landings. The internal logic follows a ​First-In-First-Out (FIFO) principle​, but also considers fuel emergencies for priority landings.</li>
 <li>​<strong>Parking_Queue</strong>​: Manages the scheduling of landed planes, ensuring they are parked in the order they arrive and proceed to subsequent processes (e.g., maintenance checks) after a short stay. It follows a ​<strong>FIFO principle</strong>​, meaning the first plane to arrive is the first to complete parking. Each plane requires a ​<strong>fixed parking time of 5 seconds</strong>​.</li>
 <li>​<strong>MaintenanceCheck</strong>​: Receives landed planes and checks for fuel levels or maintenance needs. If maintenance is required, the processing time is extended. Once completed, the plane is output to the system's external environment or the next stage.</li>
 </ol>
@@ -85,37 +85,26 @@ Y = {<code>final_out</code>}</p>
 <div class="language-math">\langle X, S, Y, \delta_{\text{int}}, \delta_{\text{ext}}, \lambda, \text{ta}\rangle</div>
 <h5>2.2.1 Landing_Queue (Atomic)</h5>
 <div class="language-graphviz">digraph LandingQueue {
-    rankdir=TB;
-    
-    subgraph cluster_LandingQueue {
-        label=&quot;LandingQueue Atomic Model&quot;;
-        style=filled;
-        color=lightgrey;
-        
-        state [label=&quot;LandingQueueState\n(busy, sigma, planeQueue)&quot;, shape=box, style=filled, fillcolor=white];
-        ext_in [label=&quot;Input Port:\nplane_in&quot;, shape=ellipse, style=filled, fillcolor=lightblue];
-        ext_out [label=&quot;Output Port:\nlanded_out&quot;, shape=ellipse, style=filled, fillcolor=lightblue];
+    rankdir=LR;
+    node [shape=circle, style=filled, fillcolor=lightblue];
 
-        extTrans [label=&quot;externalTransition\n(Update queue, handle emergency landings)&quot;, shape=box];
-        intTrans [label=&quot;internalTransition\n(Pop front of queue, complete landing)&quot;, shape=box];
-        confluentTrans [label=&quot;confluentTransition\n(Process internal first, then external)&quot;, shape=box];
-        outputFunc [label=&quot;output\n(Send front plane to output)&quot;, shape=box];
-        timeAdv [label=&quot;timeAdvance\n(Return sigma)&quot;, shape=box];
-    }
+    idle [label=&quot;idle\nσ=∞&quot;];
+    busy [label=&quot;busy\nσ=10&quot;];
 
-    ext_in -&gt; extTrans [label=&quot;Plane arrival event&quot;];
-    extTrans -&gt; state;
+    in_plane [label=&quot;plane_in&quot;, color=red];
+    out_landed [label=&quot;landed_out&quot;, color=green];
 
-    state -&gt; intTrans [label=&quot;If busy &amp; sigma expires&quot;];
-    intTrans -&gt; state;
+    // 外部转换：有飞机进入
+    in_plane -&gt; idle [label=&quot;fuel&gt;=5\nAdd to back&quot;];
+    in_plane -&gt; idle [label=&quot;fuel&lt;5\nEmergency push\nAdd to front&quot;];
+    idle -&gt; busy [label=&quot;Queue not empty\nσ=10&quot;];
 
-    state -&gt; outputFunc [label=&quot;Trigger output event&quot;];
-    outputFunc -&gt; ext_out;
-    
-    state -&gt; timeAdv;
+    // 内部转换：飞机降落完成
+    busy -&gt; idle [label=&quot;Plane landed\nPop front&quot;];
+    busy -&gt; busy [label=&quot;More planes in queue\nσ=10&quot;];
 
-    ext_in -&gt; confluentTrans [label=&quot;Simultaneous event&quot;, style=dashed];
-    state -&gt; confluentTrans [label=&quot;Triggers&quot;, style=dashed];
+    // 输出函数
+    busy -&gt; out_landed [label=&quot;Plane landed\nSend message&quot;];
 }
 </div>
 <p><span class="language-math">X = \{\text{Plane}\}</span></p>
@@ -182,37 +171,25 @@ Y = {<code>final_out</code>}</p>
 </ul>
 <h5>2.2.2 Parking_Queue (Atomic)</h5>
 <div class="language-graphviz">digraph ParkingQueue {
-    rankdir=TB;
-    
-    subgraph cluster_ParkingQueue {
-        label=&quot;ParkingQueue Atomic Model&quot;;
-        style=filled;
-        color=lightgrey;
-        
-        state [label=&quot;ParkingQueueState\n(busy, sigma, planeQueue)&quot;, shape=box, style=filled, fillcolor=white];
-        ext_in [label=&quot;Input Port:\nplane_in&quot;, shape=ellipse, style=filled, fillcolor=lightblue];
-        ext_out [label=&quot;Output Port:\nparking_done_out&quot;, shape=ellipse, style=filled, fillcolor=lightblue];
+    rankdir=LR;
+    node [shape=circle, style=filled, fillcolor=lightblue];
 
-        extTrans [label=&quot;externalTransition\n(Decrease sigma, add plane, start service)&quot;, shape=box];
-        intTrans [label=&quot;internalTransition\n(Pop front plane, update state)&quot;, shape=box];
-        confluentTrans [label=&quot;confluentTransition\n(Process internal first, then external)&quot;, shape=box];
-        outputFunc [label=&quot;output\n(Send front plane to output)&quot;, shape=box];
-        timeAdv [label=&quot;timeAdvance\n(Return sigma)&quot;, shape=box];
-    }
+    idle [label=&quot;idle\nσ=∞&quot;];
+    busy [label=&quot;busy\nσ=5&quot;];
 
-    ext_in -&gt; extTrans [label=&quot;New plane arrives&quot;];
-    extTrans -&gt; state;
+    in_plane [label=&quot;plane_in&quot;, color=red];
+    out_parking [label=&quot;parking_done_out&quot;, color=green];
 
-    state -&gt; intTrans [label=&quot;If sigma expires&quot;];
-    intTrans -&gt; state;
+    // 外部转换：飞机到达
+    in_plane -&gt; idle [label=&quot;Add to queue&quot;];
+    idle -&gt; busy [label=&quot;Queue not empty\nσ=5&quot;];
 
-    state -&gt; outputFunc [label=&quot;Trigger output event&quot;];
-    outputFunc -&gt; ext_out;
-    
-    state -&gt; timeAdv;
+    // 内部转换：飞机停机完成
+    busy -&gt; idle [label=&quot;Plane parked\nPop queue&quot;];
+    busy -&gt; busy [label=&quot;More planes in queue\nσ=5&quot;];
 
-    ext_in -&gt; confluentTrans [label=&quot;Simultaneous event&quot;, style=dashed];
-    state -&gt; confluentTrans [label=&quot;Update state&quot;, style=dashed];
+    // 输出函数
+    busy -&gt; out_parking [label=&quot;Plane parked\nSend message&quot;];
 }
 </div>
 <p><span class="language-math">X = \{\text{Plane}\}</span></p>
@@ -234,7 +211,7 @@ Y = {<code>final_out</code>}</p>
 <li><strong>Trigger Condition</strong>: When the parking service time expires (internal event occurs).</li>
 <li><strong>State Update Rules</strong>:
 <ul>
-<li>Remove the <strong>front plane</strong> from <code>planeQueue</code> (this plane has completed parking).</li>
+<li>Remove the front plane from <code>planeQueue</code> (this plane has completed parking).</li>
 <li>If <code>planeQueue</code> is not empty, then set:<br />
 <span class="language-math">\text{busy} \leftarrow \text{true}</span>,<br />
 <span class="language-math">\sigma \leftarrow 5.0</span><br />
@@ -266,7 +243,7 @@ Y = {<code>final_out</code>}</p>
 <li><strong>Trigger Condition</strong>: Just before an internal event (i.e., when a plane's parking service is completed).</li>
 <li><strong>Output Rule</strong>:
 <ul>
-<li>If <code>planeQueue</code> is not empty, output the <strong>front plane</strong> to the <code>parking_done_out</code> port, indicating that it has just finished parking.</li>
+<li>If <code>planeQueue</code> is not empty, output the front plane to the <code>parking_done_out</code> port, indicating that it has just finished parking.</li>
 <li>If the queue is empty, there is no output.</li>
 </ul>
 </li>
@@ -282,41 +259,25 @@ Y = {<code>final_out</code>}</p>
 </ul>
 <h5>2.2.3 Maintenance_Check (Atomic)</h5>
 <div class="language-graphviz">digraph MaintenanceCheck {
-    rankdir=TB;
-    
-    subgraph cluster_MaintenanceCheck {
-        label=&quot;MaintenanceCheck Atomic Model&quot;;
-        style=filled;
-        color=lightgrey;
-        
-        ext_in [label=&quot;Input Port:\nplane_in&quot;, shape=ellipse, style=filled, fillcolor=lightblue];
-        ext_out [label=&quot;Output Port:\nplane_out&quot;, shape=ellipse, style=filled, fillcolor=lightblue];
-        
-        state [label=&quot;MaintenanceCheckState\n(hasPlane, plane, sigma)&quot;, shape=box, style=filled, fillcolor=white];
+    rankdir=LR;
+    node [shape=circle, style=filled, fillcolor=lightblue];
 
-        timeAdv [label=&quot;timeAdvance\n(Return sigma)&quot;, shape=box];
+    idle [label=&quot;idle\nσ=∞&quot;];
+    checking [label=&quot;checking\nσ=1 or 15&quot;];
 
-        extTrans [label=&quot;externalTransition\n(Receive plane, check fuel, start inspection)&quot;, shape=box];
-        confluentTrans [label=&quot;confluentTransition\n(Process internal first, then external)&quot;, shape=box, style=dashed];
-        intTrans [label=&quot;internalTransition\n(Inspection complete, reset state)&quot;, shape=box];
+    in_plane [label=&quot;plane_in&quot;, color=red];
+    out_plane [label=&quot;plane_out&quot;, color=green];
 
-        outputFunc [label=&quot;output\n(Send inspected plane to output)&quot;, shape=box];
+    // External Transition: Plane arrives
+    in_plane -&gt; idle [label=&quot;Plane arrives&quot;];
+    idle -&gt; checking [label=&quot;fuel &gt;= 30\nσ=1&quot;];
+    idle -&gt; checking [label=&quot;fuel &lt; 30\nσ=15&quot;];
 
-        // Data flow connections
-        ext_in -&gt; extTrans [label=&quot;Plane arrives&quot;];
-        extTrans -&gt; state;
+    // Internal Transition: Maintenance complete
+    checking -&gt; idle [label=&quot;Maintenance done&quot;];
 
-        state -&gt; intTrans [label=&quot;If inspection time expires&quot;];
-        intTrans -&gt; state;
-
-        state -&gt; outputFunc [label=&quot;Trigger output event&quot;];
-        outputFunc -&gt; ext_out;
-        
-        state -&gt; timeAdv;
-
-        ext_in -&gt; confluentTrans [label=&quot;Simultaneous event&quot;, style=dashed];
-        state -&gt; confluentTrans [label=&quot;Update state&quot;, style=dashed];
-    }
+    // Output: Plane is checked
+    checking -&gt; out_plane [label=&quot;Plane checked\nSend message&quot;];
 }
 </div>
 <p><span class="language-math">X = \{\text{Plane}\}</span></p>
@@ -351,9 +312,9 @@ Y = {<code>final_out</code>}</p>
 <li><strong>Subtract elapsed time</strong>: If <span class="language-math">\sigma \neq \infty</span>, update <span class="language-math">\sigma \leftarrow \max(0, \sigma - e)</span>.</li>
 <li><strong>For each incoming plane</strong> <code>p</code> received on <code>plane_in</code>:
 <ul>
-<li>If the system is idle (i.e., <strong>hasPlane</strong> is false), then:
+<li>If the system is idle (i.e., <code>hasPlane</code> is false), then:
 <ul>
-<li>Set <strong>plane</strong> to <code>p</code> and <strong>hasPlane</strong> to true.</li>
+<li>Set <code>plane</code> to <code>p</code> and <code>hasPlane</code> to true.</li>
 <li>Determine the maintenance duration based on fuel:
 <ul>
 <li>If <code>p.fuel &lt; 30</code>, set <span class="language-math">\sigma \leftarrow 15.0</span> (maintenance needed).</li>
@@ -362,7 +323,7 @@ Y = {<code>final_out</code>}</p>
 </li>
 </ul>
 </li>
-<li>If the system is already busy (i.e., <strong>hasPlane</strong> is true), ignore the additional plane (or alternatively, implement a queueing/discard strategy).</li>
+<li>If the system is already busy (i.e., <code>hasPlane</code> is true), ignore the additional plane (or alternatively, implement a queueing/discard strategy).</li>
 </ul>
 </li>
 </ul>
@@ -460,14 +421,14 @@ Y = {<code>final_out</code>}</p>
 <ol>
 <li><strong>LandingQueue</strong>
 <ul>
-<li>UA347 triggers <strong>emergency insertion</strong> due to critically low fuel.</li>
-<li>Instead of being appended at the end, UA347 is inserted ​<strong>at the front of the queue</strong>​.</li>
-<li>UA347 lands <strong>before</strong> previously scheduled aircraft.</li>
+<li>UA347 triggers emergency insertion due to critically low fuel.</li>
+<li>Instead of being appended at the end, UA347 is inserted ​at the front of the queue​.</li>
+<li>UA347 lands before previously scheduled aircraft.</li>
 </ul>
 </li>
 <li><strong>ParkingQueue</strong>
 <ul>
-<li>After landing, UA347 is forwarded to ​<strong>ParkingQueue</strong>​.</li>
+<li>After landing, UA347 is forwarded to ​ParkingQueue​.</li>
 </ul>
 </li>
 <li><strong>MaintenanceCheck</strong>
@@ -478,7 +439,7 @@ Y = {<code>final_out</code>}</p>
 </ol>
 <h4><strong>Observed Results</strong></h4>
 <ul>
-<li>The simulation log confirms that at ​<strong>Time 20</strong>​, UA347 <strong>jumps ahead</strong> in the queue.</li>
+<li>The simulation log confirms that at ​<strong>Time 20</strong>​, UA347 jumps ahead in the queue.</li>
 <li><strong>LandingQueue</strong> correctly prioritizes emergency cases.</li>
 <li>The <strong>MaintenanceCheck</strong> applies extended processing time for UA347.</li>
 </ul>
