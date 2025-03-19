@@ -13,7 +13,7 @@ struct Landing_Control : public Coupled {
     Landing_Control(const std::string& id)
       : Coupled(id)
     {
-        std::string input_file = "/home/William/Airport_Ground_Control/main/airplane.txt";
+        std::string input_file = "./airplane.txt";
 
         // 1) 输入流
         auto plane_input_reader = addComponent<lib::IEStream<Plane>>(
